@@ -1,176 +1,153 @@
-import { Player } from 'textalive-app-api'
+import { useEffect, useState, useMemo } from "react";
+import { Player } from "textalive-app-api";
 
-// 単語が発声されていたら #text に表示する
-// Show words being vocalized in #text
-const animateWord = function (now, unit) {
-  if (unit.contains(now)) {
-    document.querySelector("#text").textContent = unit.text;
-  }
-};
+import { PlayerControl } from "./PlayerControl";
 
-// TextAlive Player を作る
-// Instantiate a TextAlive Player instance
-const player = new Player({
-  app: {
-    token: "1HJzpsZ11CfoUPrr",
-  },
-  mediaElement: document.querySelector("#media"),
-});
+const defaultFontSize = 70;
+const defaultColor = "#1f4391";
 
-// TextAlive Player のイベントリスナを登録する
-// Register event listeners
-player.addListener({
-  onAppReady,
-  onVideoReady,
-  onTimerReady,
-  onThrottledTimeUpdate,
-  onPlay,
-  onPause,
-  onStop,
-});
-
-const playBtns = document.querySelectorAll(".play");
-const jumpBtn = document.querySelector("#jump");
-const pauseBtn = document.querySelector("#pause");
-const rewindBtn = document.querySelector("#rewind");
-const positionEl = document.querySelector("#position strong");
-
-const artistSpan = document.querySelector("#artist span");
-const songSpan = document.querySelector("#song span");
-
-/**
- * TextAlive App が初期化されたときに呼ばれる
- *
- * @param {IPlayerApp} app - https://developer.textalive.jp/packages/textalive-app-api/interfaces/iplayerapp.html
- */
-function onAppReady(app) {
-  // TextAlive ホストと接続されていなければ再生コントロールを表示する
-  // Show control if this app is launched standalone (not connected to a TextAlive host)
-  if (!app.managed) {
-    document.querySelector("#control").style.display = "block";
-
-    // 再生ボタン / Start music playback
-    playBtns.forEach((playBtn) =>
-      playBtn.addEventListener("click", () => {
-        player.video && player.requestPlay();
-      })
-    );
-
-    // 歌詞頭出しボタン / Seek to the first character in lyrics text
-    jumpBtn.addEventListener(
-      "click",
-      () =>
-        player.video &&
-        player.requestMediaSeek(player.video.firstChar.startTime)
-    );
-
-    // 一時停止ボタン / Pause music playback
-    pauseBtn.addEventListener(
-      "click",
-      () => player.video && player.requestPause()
-    );
-
-    // 巻き戻しボタン / Rewind music playback
-    rewindBtn.addEventListener(
-      "click",
-      () => player.video && player.requestMediaSeek(0)
-    );
-
-    document
-      .querySelector("#header a")
-      .setAttribute(
-        "href",
-        "https://developer.textalive.jp/app/run/?ta_app_url=https%3A%2F%2Ftextalivejp.github.io%2Ftextalive-app-basic%2F&ta_song_url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DygY2qObZv24"
-      );
-  } else {
-    document
-      .querySelector("#header a")
-      .setAttribute(
-        "href",
-        "https://textalivejp.github.io/textalive-app-basic/"
-      );
-  }
-
-  // 楽曲URLが指定されていなければ マジカルミライ 2020テーマ曲を読み込む
-  // Load a song when a song URL is not specified
-  if (!app.songUrl) {
-    player.createFromSongUrl("http://www.youtube.com/watch?v=ygY2qObZv24");
-  }
-}
-
-/**
- * 動画オブジェクトの準備が整ったとき（楽曲に関する情報を読み込み終わったとき）に呼ばれる
- *
- * @param {IVideo} v - https://developer.textalive.jp/packages/textalive-app-api/interfaces/ivideo.html
- */
-function onVideoReady(v) {
-  // メタデータを表示する
-  // Show meta data
-  artistSpan.textContent = player.data.song.artist.name;
-  songSpan.textContent = player.data.song.name;
-
-  // 定期的に呼ばれる各単語の "animate" 関数をセットする
-  // Set "animate" function
-  let w = player.video.firstWord;
-  while (w) {
-    w.animate = animateWord;
-    w = w.next;
-  }
-}
-
-/**
- * 音源の再生準備が完了した時に呼ばれる
- *
- * @param {Timer} t - https://developer.textalive.jp/packages/textalive-app-api/interfaces/timer.html
- */
-function onTimerReady(t) {
-  // ボタンを有効化する
-  // Enable buttons
-  if (!player.app.managed) {
-    document
-      .querySelectorAll("button")
-      .forEach((btn) => (btn.disabled = false));
-  }
-
-  // 歌詞がなければ歌詞頭出しボタンを無効にする
-  // Disable jump button if no lyrics is available
-  jumpBtn.disabled = !player.video.firstChar;
-}
-
-/**
- * 動画の再生位置が変更されたときに呼ばれる（あまりに頻繁な発火を防ぐため一定間隔に間引かれる）
- *
- * @param {number} position - https://developer.textalive.jp/packages/textalive-app-api/interfaces/playereventlistener.html#onthrottledtimeupdate
- */
-function onThrottledTimeUpdate(position) {
-  // 再生位置を表示する
-  // Update current position
-  positionEl.textContent = String(Math.floor(position));
-
-  // さらに精確な情報が必要な場合は `player.timer.position` でいつでも取得できます
-  // More precise timing information can be retrieved by `player.timer.position` at any time
-}
-
-// 再生が始まったら #overlay を非表示に
-// Hide #overlay when music playback started
-function onPlay() {
-  document.querySelector("#overlay").style.display = "none";
-}
-
-// 再生が一時停止・停止したら歌詞表示をリセット
-// Reset lyrics text field when music playback is paused or stopped
-function onPause() {
-  document.querySelector("#text").textContent = "-";
-}
-function onStop() {
-  document.querySelector("#text").textContent = "-";
-}
+const sansSerif = `"Hiragino Kaku Gothic Pro", "游ゴシック体", "Yu Gothic", YuGothic, Meiryo, HelveticaNeue, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+const serif = `"Times New Roman", YuMincho, "Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", serif`;
 
 function App() {
+  const [player, setPlayer] = useState(null);
+  const [app, setApp] = useState(null);
+  const [char, setChar] = useState("");
+  const [fontFamily, setFontFamily] = useState(sansSerif);
+  const [fontSize, setFontSize] = useState(defaultFontSize);
+  const [color, setColor] = useState(defaultColor);
+  const [darkMode, setDarkMode] = useState(false);
+  const [mediaElement, setMediaElement] = useState(null);
+
+  const div = useMemo(() => <div className="media" ref={setMediaElement} />, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !mediaElement) {
+      return;
+    }
+
+    console.log("--- [app] create Player instance ---");
+    const p = new Player({
+      app: {
+        // トークンは https://developer.textalive.jp/profile で取得したものを使う
+        token: "elLljAkPmCHHiGDP",
+        parameters: [
+          {
+            title: "フォントの種類",
+            name: "fontFamily",
+            className: "Select",
+            params: [
+              [serif, "明朝体"],
+              [sansSerif, "ゴシック体"],
+            ],
+            initialValue: sansSerif,
+          },
+          {
+            title: "フォントサイズ",
+            name: "fontSize",
+            className: "Slider",
+            params: [0, 100],
+            initialValue: defaultFontSize,
+          },
+          {
+            title: "テキスト色",
+            name: "color",
+            className: "Color",
+            initialValue: defaultColor,
+          },
+          {
+            title: "ダークモード",
+            name: "darkMode",
+            className: "Check",
+            initialValue: false,
+          },
+        ],
+      },
+      mediaElement,
+    });
+
+    const playerListener = {
+      onAppReady: (app) => {
+        console.log("--- [app] initialized as TextAlive app ---");
+        console.log("managed:", app.managed);
+        console.log("host:", app.host);
+        console.log("song url:", app.songUrl);
+        if (!app.songUrl) {
+          p.createFromSongUrl("http://piapro.jp/t/C0lr/20180328201242");
+        }
+        setApp(app);
+      },
+      onAppParameterUpdate: (name, value) => {
+        console.log(`[app] parameters.${name} update:`, value);
+        if (name === "fontFamily") {
+          setFontFamily(value);
+        }
+        if (name === "fontSize") {
+          setFontSize(value);
+        }
+        if (name === "color") {
+          const color = value;
+          setColor(`rgb(${color.r}, ${color.g}, ${color.b})`);
+        }
+        if (name === "darkMode") {
+          setDarkMode(!!value);
+        }
+      },
+      onVideoReady: () => {
+        console.log("--- [app] video is ready ---");
+        console.log("player:", p);
+        console.log("player.data.song:", p.data.song);
+        console.log("player.data.song.name:", p.data.song.name);
+        console.log("player.data.song.artist.name:", p.data.song.artist.name);
+        console.log("player.data.songMap:", p.data.songMap);
+        let c = p.video.firstChar;
+        while (c && c.next) {
+          c.animate = (now, u) => {
+            if (u.startTime <= now && u.endTime > now) {
+              setChar(u.text);
+            }
+          };
+          c = c.next;
+        }
+      },
+    };
+    p.addListener(playerListener);
+
+    setPlayer(p);
+    return () => {
+      console.log("--- [app] shutdown ---");
+      p.removeListener(playerListener);
+      p.dispose();
+    };
+  }, [mediaElement]);
+
   return (
     <>
+      {player && app && (
+        <div className="controls">
+          <PlayerControl disabled={app.managed} player={player} />
+        </div>
+      )}
+      <div
+        className="wrapper"
+        style={{
+          background: darkMode ? "#333" : "#fff",
+        }}
+      >
+        <div
+          className="char"
+          style={{
+            fontFamily,
+            fontSize: `${fontSize}vh`,
+            color,
+          }}
+        >
+          {char}
+        </div>
+      </div>
+      {div}
     </>
-  )
+  );
 }
 
 export default App
